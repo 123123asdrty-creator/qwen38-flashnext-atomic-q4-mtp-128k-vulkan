@@ -1,0 +1,61 @@
+{
+  "label": "atomic128-n38-h24-ub2048",
+  "build": "b200-c589f0e",
+  "runtime_dir": "<package>\\runtime",
+  "config": {
+    "context": 131072,
+    "ncmoe": 38,
+    "hotmoe_slots": 24,
+    "dynamic_swaps": 2,
+    "kv": "f16",
+    "batch": 4096,
+    "ubatch": 2048,
+    "threads_requested": 24,
+    "threads_effective": 22,
+    "system_reserve_threads": 2,
+    "request_timeout_sec": 240,
+    "process_priority": "Normal",
+    "load_only": false,
+    "verbosity": 4,
+    "round_max_tokens": 220,
+    "gpu_layers": 999,
+    "og_minimal_args": false,
+    "model": "<model-dir>\\Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00001-of-00033.gguf",
+    "draft_model": "",
+    "spec_type": "none",
+    "draft_n_max": 3,
+    "draft_n_min": 0,
+    "draft_p_min": 0.75,
+    "draft_kv": "q8_0"
+  },
+  "results": [
+    {
+      "name": "warmup",
+      "prompt_tokens": 63,
+      "prompt_tps": 15.0,
+      "generated_tokens": 32,
+      "generation_tps": 12.81
+    },
+    {
+      "name": "decode-1",
+      "prompt_tokens": 112,
+      "prompt_tps": 44.34,
+      "generated_tokens": 220,
+      "generation_tps": 16.51
+    },
+    {
+      "name": "decode-2",
+      "prompt_tokens": 86,
+      "prompt_tps": 45.93,
+      "generated_tokens": 220,
+      "generation_tps": 19.67
+    },
+    {
+      "name": "decode-3",
+      "prompt_tokens": 82,
+      "prompt_tps": 46.23,
+      "generated_tokens": 220,
+      "generation_tps": 19.78
+    }
+  ]
+}

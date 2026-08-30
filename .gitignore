@@ -1,0 +1,14 @@
+# Models are downloaded separately and must never be committed.
+*.gguf
+models/
+
+# Runtime logs and local benchmark output.
+*.log
+*.err.log
+local-results/
+
+# Windows and editor noise.
+Thumbs.db
+.vs/
+.vscode/
+
