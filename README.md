@@ -82,5 +82,4 @@ its publisher; the launcher rejects other quantizations and incomplete sets.
 The bundled runtime is derived from llama.cpp under the included MIT license.
 `patches/hotmoe-qwen4exp-tracked.patch` contains tracked source changes against
 base commit `c589f0ed10c643678c4707dd160c21ac7633ebc0`; new source files are under
-`patches/source-additions`. No model, Android project, APK, credentials, or
-private application files are included.
+`patches/source-additions`. 
