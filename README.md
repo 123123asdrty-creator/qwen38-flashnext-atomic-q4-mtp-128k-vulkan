@@ -27,7 +27,7 @@ quality-first profile.
 | Warm 2K prompt processing | 243.42 tok/s | passes 200 tok/s short-context target |
 | Warm 2K MTP decode | 23.86 tok/s | passes 20 tok/s short-context target |
 | MTP draft acceptance | 63 / 67 (94.03%) | measured |
-| 128K allocation, 30K loaded, 256 generated | 126.24 prompt / 18.41 decode tok/s; 191/191 accepted | completed; user accepted despite missing old 200/20 floor |
+| 128K allocation, 30K loaded, 256 generated | 126.24 prompt / 18.41 decode tok/s; 191/191 accepted | completed; below the original 200/20 targets |
 
 KLD values from separate comparisons are not additive. This package does not
 claim that the complete MTP path is under 0.1 versus original BF16 until a
@@ -86,7 +86,7 @@ The default profile is:
 
 - 131,072 allocated context, one slot;
 - target K/V and QSA routing key in BF16;
-- batch 4096, micro-batch 1024, 22 threads;
+- batch 4096, micro-batch 3072, 22 threads;
 - 38 CPU-MoE layers with all remaining eligible layers on Vulkan;
 - MTP depth 3, `p-min 0.7`, Q8_0 draft cache;
 - QSA key-only storage on;

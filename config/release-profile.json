@@ -27,7 +27,7 @@
   "defaults": {
     "context": 131072,
     "batch": 4096,
-    "ubatch": 1024,
+    "ubatch": 3072,
     "threads": 22,
     "cpu_moe_layers": 38,
     "target_cache_k": "bf16",

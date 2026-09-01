@@ -8,9 +8,9 @@ All local rows used the exact 33-shard AtomicChat Q4_K_M-M64 model and proved
 | warmed short check | 8192 allocated / about 2K loaded | 243.4153 | 23.8584 | 63/67 |
 | final depth check | 131072 allocated / 30000 loaded | 126.2350 | 18.4065 | 191/191 |
 
-The final depth check generated 256 tokens. It completed successfully and was
-accepted by the user, but it does not meet the earlier 200 prompt / 20 decode
-floor. The short-context result must not be presented as long-context speed.
+The final depth check generated 256 tokens and completed successfully, but it
+does not meet the earlier 200 prompt / 20 decode floor. The short-context
+result must not be presented as long-context speed.
 
 ## Quality evidence
 

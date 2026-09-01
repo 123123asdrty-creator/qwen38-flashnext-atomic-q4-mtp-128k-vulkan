@@ -8,13 +8,14 @@
     "mtp_depth": 3,
     "mtp_p_min": 0.7,
     "batch": 4096,
-    "ubatch": 1024,
+    "ubatch": 3072,
     "cpu_moe_layers": 38
   },
   "performance": {
     "short_warmed": {
       "allocated_context": 8192,
       "loaded_context_approx": 2048,
+      "ubatch": 1024,
       "prompt_tokens_per_second": 243.4152779932027,
       "decode_tokens_per_second": 23.85841861880852,
       "drafted": 67,
@@ -23,15 +24,15 @@
     "final_30k": {
       "allocated_context": 131072,
       "loaded_context": 30000,
+      "ubatch": 3072,
       "generated_tokens": 256,
       "prompt_tokens_per_second": 126.235,
       "decode_tokens_per_second": 18.4065,
       "drafted": 191,
       "accepted": 191,
       "completed": true,
-      "user_accepted": true,
-      "meets_old_prompt_200_floor": false,
-      "meets_old_decode_20_floor": false
+      "meets_requested_prompt_200_floor": false,
+      "meets_requested_decode_20_floor": false
     }
   },
   "quality": {

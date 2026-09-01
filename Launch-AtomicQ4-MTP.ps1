@@ -16,7 +16,7 @@ param(
     [int] $Batch = 4096,
 
     [ValidateRange(32, 8192)]
-    [int] $UBatch = 1024,
+    [int] $UBatch = 3072,
 
     [ValidateRange(0, 8)]
     [int] $DraftNMax = 3,

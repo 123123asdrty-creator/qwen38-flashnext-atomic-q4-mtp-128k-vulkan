@@ -6,7 +6,7 @@ The launcher exposes `-Model`, `-DraftModel`, `-Server`, `-Context`,
 | Parameter | Default | Guidance |
 |---|---:|---|
 | `Context` | 131072 | Keep for the production profile. |
-| `Batch` / `UBatch` | 4096 / 1024 | Reduce UBatch to 512 for allocation trouble; retest 2048 for prompt speed. |
+| `Batch` / `UBatch` | 4096 / 3072 | This is the measured 30K-depth setting. Reduce UBatch to 2048 or 1024 if another GPU workload causes allocation trouble. |
 | `Threads` | 22 | Tuned for the Ryzen 9 7900X. |
 | `CpuMoeLayers` | 38 | Lower needs more VRAM; higher is generally slower. |
 | `DraftNMax` | 3 | Try 2 only in a controlled long-context A/B. |
