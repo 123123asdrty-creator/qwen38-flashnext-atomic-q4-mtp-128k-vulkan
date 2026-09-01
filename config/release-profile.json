@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "name": "Qwen3.8 Flash-Next Atomic Q4 MTP 128K Vulkan",
+  "runtime": {
+    "build": 10682,
+    "base_commit": "843d5750579a15ed4a42d73eb862855c271021ac",
+    "target_gpu": "AMD Radeon RX 7900 XTX",
+    "expected_vulkan_model_buffer_mib": 15595.52
+  },
+  "hardware": {
+    "gpu": "AMD Radeon RX 7900 XTX 24 GB",
+    "cpu": "AMD Ryzen 9 7900X",
+    "ram_gib": 64,
+    "os": "Windows 11",
+    "storage": "fast SSD with mmap"
+  },
+  "target_model": {
+    "first_shard": "Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64-00001-of-00033.gguf",
+    "shards": 33,
+    "total_bytes": 94525394976
+  },
+  "mtp_sidecar": {
+    "file": "mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf",
+    "bytes": 2362007744,
+    "sha256": "41ef1d94ee9249d4140de494d1ad6de4441860e1b50e31cf4cceb0971f8ddf12"
+  },
+  "defaults": {
+    "context": 131072,
+    "batch": 4096,
+    "ubatch": 1024,
+    "threads": 22,
+    "cpu_moe_layers": 38,
+    "target_cache_k": "bf16",
+    "target_cache_v": "bf16",
+    "qsa_indexer_k": "bf16",
+    "qsa_key_only": true,
+    "mtp_depth": 3,
+    "mtp_p_min": 0.7,
+    "draft_cache": "q8_0",
+    "context_checkpoints": 0,
+    "hotmoe": false,
+    "hostmoe": false,
+    "dense_bypass": false,
+    "gather": false,
+    "strided_add": false
+  }
+}

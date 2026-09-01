@@ -1,0 +1,46 @@
+{
+  "schema_version": 1,
+  "hardware": "RX 7900 XTX 24 GB, Ryzen 9 7900X, 64 GB RAM",
+  "model": "Qwen3.8-Flash-Next-AD-4.27bpw-Q4_K_M-M64, 33 shards",
+  "profile": {
+    "target_kv": "bf16/bf16",
+    "qsa_indexer": "bf16 key-only",
+    "mtp_depth": 3,
+    "mtp_p_min": 0.7,
+    "batch": 4096,
+    "ubatch": 1024,
+    "cpu_moe_layers": 38
+  },
+  "performance": {
+    "short_warmed": {
+      "allocated_context": 8192,
+      "loaded_context_approx": 2048,
+      "prompt_tokens_per_second": 243.4152779932027,
+      "decode_tokens_per_second": 23.85841861880852,
+      "drafted": 67,
+      "accepted": 63
+    },
+    "final_30k": {
+      "allocated_context": 131072,
+      "loaded_context": 30000,
+      "generated_tokens": 256,
+      "prompt_tokens_per_second": 126.235,
+      "decode_tokens_per_second": 18.4065,
+      "drafted": 191,
+      "accepted": 191,
+      "completed": true,
+      "user_accepted": true,
+      "meets_old_prompt_200_floor": false,
+      "meets_old_decode_20_floor": false
+    }
+  },
+  "quality": {
+    "published_q4_vs_bf16_mean_kld": 0.084216,
+    "mtp_verify_vs_serial_mean_kld": 0.048002,
+    "mtp_verify_vs_serial_mean_kld_uncertainty": 0.005825,
+    "mtp_verify_vs_serial_ppl_ratio": 1.015908,
+    "mtp_verify_vs_serial_same_top_percent": 93.725,
+    "strict_incremental_gate_pass": false,
+    "direct_end_to_end_bf16_kld_measured": false
+  }
+}

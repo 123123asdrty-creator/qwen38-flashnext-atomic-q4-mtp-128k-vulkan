@@ -1,25 +1,34 @@
-# Controlled tuning results
+# Benchmark and quality summary
 
-All rows use the same AtomicChat model, Vulkan build, 131072 allocated context,
-f16 K/V, 38 CPU-MoE layers, batch 4096, 22 effective threads, no MTP, and the
-same three coding prompts. These are short-context decode tests, not a filled
-128K-context claim.
+All local rows used the exact 33-shard AtomicChat Q4_K_M-M64 model and proved
+`AMD Radeon RX 7900 XTX` plus a 15595.52 MiB Vulkan model buffer.
 
-| Hot slots | Dynamic swaps | Ubatch | Warm decode | Decode 1 | Decode 2 | Decode 3 | Result |
-|---:|---:|---:|---:|---:|---:|---:|---|
-| 10 | 2 | 4096 | 7.30 | 8.94 | 9.27 | 9.53 | allocator fallback |
-| 10 | 2 | 2048 | 11.62 | 15.12 | 15.75 | 16.34 | stable |
-| 16 | 2 | 2048 | 12.18 | 17.18 | 18.81 | 18.27 | stable |
-| 24 | 2 | 2048 | 12.81 | 16.51 | 19.67 | 19.78 | selected |
-| 24 | 3 | 2048 | 12.96 | 16.41 | 19.56 | 18.69 | slower than 2 swaps |
+| Test | Context | Prompt tok/s | Decode tok/s | MTP acceptance |
+|---|---:|---:|---:|---:|
+| warmed short check | 8192 allocated / about 2K loaded | 243.4153 | 23.8584 | 63/67 |
+| final depth check | 131072 allocated / 30000 loaded | 126.2350 | 18.4065 | 191/191 |
 
-On an exact 12,133-token controlled prompt, the unmodified mmap path measured
-80.72 tok/s. Exact-page PLE prefetch improved the first 4K block from 76.69 to
-82.37 tok/s (about 7.4%), but did not reach the requested 200 tok/s. A separate
-prompt-only placement with six more GPU layers fit in VRAM but stalled for over
-two minutes before producing a checkpoint, so it is not shipped. The package
-therefore keeps the selected decode-first profile and labels prompt throughput
-as degraded rather than claiming the 450 tok/s planning target.
+The final depth check generated 256 tokens. It completed successfully and was
+accepted by the user, but it does not meet the earlier 200 prompt / 20 decode
+floor. The short-context result must not be presented as long-context speed.
 
-MTP is intentionally disabled. Earlier native-MTP tests did not deliver a
-stable greater-than-1.2x gain, and the f16 128K allocation has priority.
+## Quality evidence
+
+| Comparison | PPL ratio | Mean KLD | Same top |
+|---|---:|---:|---:|
+| Atomic Q4 weights vs original BF16, publisher | 1.025657 | 0.084216 | 89.487% |
+| current BF16-cache runtime vs prior same-Q4 runtime | 1.001369 ± 0.006981 | 0.024927 ± 0.002932 | 95.988% |
+| MTP target-verify graph vs serial target graph | 1.015908 ± 0.017304 | 0.048002 ± 0.005825 | 93.725% |
+| Q8_0 target KV vs BF16 target KV | — | 0.155274 | rejected |
+
+The MTP row failed the deliberately strict incremental limits of KLD at most
+0.01 and PPL-ratio point estimate at most 1.005. Its mean KLD is below 0.1,
+but separate KLD experiments are not additive; no end-to-end BF16 claim is
+made. BF16 target K/V remains the production default.
+
+The selected correction uses rollback-ring state only for true multi-token
+target verification batches. Prompt and serial paths retain the ordinary graph.
+Checkpoint state now includes the MTP hidden-row position and is restored on
+rejection. Automatic context checkpoints are disabled with `-ctxcp 0`.
+
+Compact machine-readable values are in `evidence/final-results.json`.

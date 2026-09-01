@@ -6,9 +6,10 @@ models/
 *.log
 *.err.log
 local-results/
+*.logits.kld
+build-*/
 
 # Windows and editor noise.
 Thumbs.db
 .vs/
 .vscode/
-

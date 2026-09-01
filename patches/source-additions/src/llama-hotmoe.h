@@ -78,14 +78,22 @@ struct llama_hotmoe_layer {
 };
 
 struct llama_hotmoe {
-    bool enabled    = false;
+    bool enabled     = false;
     bool host_direct = false;
+    bool init_attempted = false;
+    bool profile_enabled = false;
     int  n_slots    = 0;
     int  n_expert   = 0;
     int  max_tokens = 1;
+    int  profile_max_tokens = 1;
 
     size_t vram_bytes = 0;
     double seed_coverage = 0.0;   // fraction of profiled selections the seed covers
+    uint64_t generation = 0;
+
+    std::string profile_path;
+    uint64_t profile_tokens = 0;
+    std::unordered_map<int, std::vector<uint64_t>> profile_counts;
 
     std::unordered_map<int, llama_hotmoe_layer> layers;
 
@@ -105,6 +113,7 @@ struct llama_hotmoe {
     }
 
     void capture_async(const std::vector<ggml_tensor *> & ids, ggml_backend_sched_t sched);
+    void capture_profile(const std::vector<ggml_tensor *> & ids, ggml_backend_sched_t sched);
     void apply_pending(ggml_backend_sched_t sched);
     int dynamic_swaps() const;
     bool trace_layer(int il) const;
@@ -116,4 +125,4 @@ void llama_hotmoe_init(llama_model & model, bool force = false);
 
 // Release the cache for large prompt batches and rebuild it for decode when
 // LLAMA_HOTMOE_PHASED is enabled.
-void llama_hotmoe_maybe_phase(llama_model & model, int n_tokens);
+void llama_hotmoe_maybe_phase(llama_model & model, int n_tokens, ggml_backend_sched_t sched);

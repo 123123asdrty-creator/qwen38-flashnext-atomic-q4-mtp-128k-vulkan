@@ -1,5 +1,6 @@
 #include "llama-hotmoe.h"
 
+#include "ggml-alloc.h"
 #include "llama-impl.h"
 #include "llama-model.h"
 
@@ -7,6 +8,7 @@
 #include <cstdlib>
 #include <cstring>
 #include <fstream>
+#include <numeric>
 #include <memory>
 #include <mutex>
 #include <sstream>
@@ -74,10 +76,12 @@ void llama_hotmoe::reset() {
     layers.clear();
     enabled = false;
     host_direct = false;
+    init_attempted = false;
     n_slots = 0;
     n_expert = 0;
     vram_bytes = 0;
     seed_coverage = 0.0;
+    ++generation;
 }
 
 // ---------------------------------------------------------------------------
@@ -144,15 +148,25 @@ void llama_hotmoe_init(llama_model & model, bool force) {
     if (hm.enabled) {
         return;
     }
+    if (force && hm.init_attempted) {
+        return;
+    }
+    if (!host_direct_req && !force && hotmoe_env_int("LLAMA_HOTMOE_DEFER", 0) > 0) {
+        LLAMA_LOG_INFO("%s: HotMoE deferred until all model and context allocations are resident\n", __func__);
+        return;
+    }
     if (!host_direct_req && !force && hotmoe_env_int("LLAMA_HOTMOE_PHASED", 0) > 0) {
         LLAMA_LOG_INFO("%s: HotMoE phased mode - deferring cache allocation until decode\n", __func__);
         return;
     }
 
-    const int n_slots_req = hotmoe_env_int("LLAMA_HOTMOE", 0);
-    if (n_slots_req <= 0 && !host_direct_req) {
+    int n_slots_req = hotmoe_env_int("LLAMA_HOTMOE", 0);
+    const char * profile_out = getenv("LLAMA_HOTMOE_PROFILE_OUT");
+    const bool profile_req = profile_out && *profile_out;
+    if (n_slots_req <= 0 && !host_direct_req && !profile_req) {
         return;
     }
+    hm.init_attempted = force;
     hm.max_tokens = std::max(1, hotmoe_env_int(
             host_direct_req ? "LLAMA_HOSTMOE_MAX_TOK" : "LLAMA_HOTMOE_MAX_TOK", 1));
     const int swaps_per_token = std::max(0, hotmoe_env_int("LLAMA_HOTMOE_DYNAMIC", 0));
@@ -211,6 +225,85 @@ void llama_hotmoe_init(llama_model & model, bool force) {
     }
 
     hm.n_expert = (int) cands[0].gate->ne[2];
+
+    if (profile_req && !hm.profile_enabled) {
+        hm.profile_enabled = true;
+        hm.profile_path = profile_out;
+        hm.profile_max_tokens = std::max(1, hotmoe_env_int("LLAMA_HOTMOE_PROFILE_MAX_TOK", 1));
+        for (const auto & c : cands) {
+            hm.profile_counts[c.il].assign(hm.n_expert, 0);
+        }
+        LLAMA_LOG_INFO("%s: recording HotMoE routes for batches of at most %d tokens to '%s'\n",
+                __func__, hm.profile_max_tokens, hm.profile_path.c_str());
+    }
+
+    if (n_slots_req <= 0 && !host_direct_req) {
+        return;
+    }
+
+    // Auto-size only after the target, MTP sidecar, KV caches, and scheduler
+    // buffers are resident (LLAMA_HOTMOE_DEFER=1). This uses the backend's
+    // live per-process Vulkan budget and ggml's exact allocation-size routine,
+    // including tensor and buffer alignment; no empirical slot probing is
+    // involved. The reserve covers the larger first HotMoE execution graph.
+    if (!host_direct_req && hotmoe_env_int("LLAMA_HOTMOE_AUTO", 0) > 0) {
+        const int upper = std::min(std::max(1, n_slots_req), hm.n_expert - 1);
+        const size_t n_tensors = cands.size() * 5 + 8;
+
+        auto cache_bytes_for_slots = [&](int slots) -> size_t {
+            ggml_init_params test_ip = {
+                /*.mem_size   =*/ ggml_tensor_overhead() * n_tensors,
+                /*.mem_buffer =*/ nullptr,
+                /*.no_alloc   =*/ true,
+            };
+            ggml_context * test_ctx = ggml_init(test_ip);
+            GGML_ASSERT(test_ctx != nullptr);
+            for (const auto & c : cands) {
+                ggml_new_tensor_3d(test_ctx, c.gate->type, c.gate->ne[0], c.gate->ne[1], slots + 1);
+                ggml_new_tensor_3d(test_ctx, c.up->type,   c.up->ne[0],   c.up->ne[1],   slots + 1);
+                ggml_new_tensor_3d(test_ctx, c.down->type, c.down->ne[0], c.down->ne[1], slots + 1);
+                ggml_new_tensor_2d(test_ctx, GGML_TYPE_I32, 1, hm.n_expert);
+                ggml_new_tensor_2d(test_ctx, GGML_TYPE_I32, 1, hm.n_expert);
+            }
+            const size_t bytes = ggml_backend_alloc_ctx_tensors_from_buft_size(test_ctx, buft);
+            ggml_free(test_ctx);
+            return bytes;
+        };
+
+        size_t free_bytes = 0;
+        size_t total_bytes = 0;
+        ggml_backend_dev_memory(dev, &free_bytes, &total_bytes);
+        const size_t reserve_bytes = (size_t) std::max(0, hotmoe_env_int("LLAMA_HOTMOE_RESERVE_MIB", 512)) * 1024 * 1024;
+
+        auto max_slots_for = [&](size_t budget) {
+            int lo = 0;
+            int hi = upper;
+            while (lo < hi) {
+                const int mid = lo + (hi - lo + 1) / 2;
+                if (cache_bytes_for_slots(mid) <= budget) {
+                    lo = mid;
+                } else {
+                    hi = mid - 1;
+                }
+            }
+            return lo;
+        };
+
+        const int raw_max = max_slots_for(free_bytes);
+        const size_t usable_bytes = free_bytes > reserve_bytes ? free_bytes - reserve_bytes : 0;
+        n_slots_req = max_slots_for(usable_bytes);
+        const size_t chosen_bytes = n_slots_req > 0 ? cache_bytes_for_slots(n_slots_req) : 0;
+
+        LLAMA_LOG_INFO("%s: HotMoE exact auto-size: free %.2f MiB / total %.2f MiB, "
+                       "raw max %d slots, reserve %.2f MiB, selected %d slots (%.2f MiB)\n",
+                __func__, free_bytes / 1024.0 / 1024.0, total_bytes / 1024.0 / 1024.0,
+                raw_max, reserve_bytes / 1024.0 / 1024.0, n_slots_req,
+                chosen_bytes / 1024.0 / 1024.0);
+        if (n_slots_req <= 0) {
+            LLAMA_LOG_WARN("%s: no HotMoE slot fits after the requested reserve\n", __func__);
+            return;
+        }
+    }
 
     if (host_direct_req) {
         // The RX 7900 XTX reports a 4096-byte imported-host-pointer alignment.
@@ -358,6 +451,7 @@ void llama_hotmoe_init(llama_model & model, bool force) {
 
         hm.host_direct = true;
         hm.enabled = true;
+        ++hm.generation;
         LLAMA_LOG_INFO("%s: HostMoE enabled - GPU kernels directly read %.2f GiB of expert weights "
                        "from system RAM across PCIe on %zu layers\n",
                 __func__, imported_bytes / 1024.0 / 1024.0 / 1024.0, hm.layers.size());
@@ -429,7 +523,7 @@ void llama_hotmoe_init(llama_model & model, bool force) {
     hm.vram_bytes = ggml_backend_buffer_get_size(buf);
 
     // ---- populate ----
-    std::vector<uint8_t> zero;
+    std::vector<uint8_t> packed;
     std::vector<int32_t> lut_h(hm.n_expert), lut_c(hm.n_expert);
 
     size_t n_seeded = 0;
@@ -474,22 +568,20 @@ void llama_hotmoe_init(llama_model & model, bool force) {
             dl.frequency[chosen[s]]   = 1;
         }
 
-        // copy the chosen experts into VRAM
+        // Copy each packed tensor in one upload. Large caches otherwise issue
+        // one backend transfer per expert, projection, and layer.
         struct pair { ggml_tensor * dst; ggml_tensor * src; };
         const pair pairs[3] = { { hl.gate, c.gate }, { hl.up, c.up }, { hl.down, c.down } };
         for (const auto & p : pairs) {
             const size_t stride = p.src->nb[2];   // bytes for one expert
             GGML_ASSERT(p.dst->nb[2] == stride);
+            packed.resize((size_t) (K + 1) * stride);
             for (int s = 0; s < K; ++s) {
                 const char * src_e = (const char *) p.src->data + (size_t) hl.expert_of[s] * stride;
-                ggml_backend_tensor_set(p.dst, src_e, (size_t) s * stride, stride);
+                memcpy(packed.data() + (size_t) s * stride, src_e, stride);
             }
-            // the trailing slot is the zero expert: quantized blocks with a zero
-            // scale decode to zero, so a memset is a valid all-zero expert
-            if (zero.size() < stride) {
-                zero.assign(stride, 0);
-            }
-            ggml_backend_tensor_set(p.dst, zero.data(), (size_t) K * stride, stride);
+            memset(packed.data() + (size_t) K * stride, 0, stride);
+            ggml_backend_tensor_set(p.dst, packed.data(), 0, packed.size());
         }
 
         // lookup tables
@@ -503,6 +595,7 @@ void llama_hotmoe_init(llama_model & model, bool force) {
     }
 
     hm.enabled = true;
+    ++hm.generation;
     dynamic->tick = K;
     {
         std::lock_guard<std::mutex> lock(g_hotmoe_dynamic_mutex);
@@ -525,7 +618,14 @@ void llama_hotmoe_init(llama_model & model, bool force) {
     }
 }
 
-void llama_hotmoe_maybe_phase(llama_model & model, int n_tokens) {
+void llama_hotmoe_maybe_phase(llama_model & model, int n_tokens, ggml_backend_sched_t sched) {
+    if (hotmoe_env_int("LLAMA_HOTMOE_DEFER", 0) > 0) {
+        if (!model.hotmoe.enabled) {
+            LLAMA_LOG_INFO("%s: sizing and allocating HotMoE after fixed runtime allocations\n", __func__);
+            llama_hotmoe_init(model, true);
+        }
+        return;
+    }
     if (hotmoe_env_int("LLAMA_HOTMOE_PHASED", 0) <= 0) {
         return;
     }
@@ -536,10 +636,91 @@ void llama_hotmoe_maybe_phase(llama_model & model, int n_tokens) {
     const int prompt_min = std::max(2, hotmoe_env_int("LLAMA_HOTMOE_PHASE_MIN", 512));
     if (n_tokens >= prompt_min && hm.enabled) {
         LLAMA_LOG_INFO("%s: releasing HotMoE cache for a %d-token prompt batch\n", __func__, n_tokens);
+        ggml_backend_sched_synchronize(sched);
         hm.reset();
-    } else if (n_tokens == 1 && !hm.enabled) {
+    } else {
+        const int decode_max = std::max(1, hotmoe_env_int("LLAMA_HOTMOE_MAX_TOK", 1));
+        if (n_tokens > decode_max || hm.enabled || hm.init_attempted) {
+            return;
+        }
         LLAMA_LOG_INFO("%s: allocating HotMoE cache for decode\n", __func__);
+        ggml_backend_sched_synchronize(sched);
         llama_hotmoe_init(model, true);
+    }
+}
+
+void llama_hotmoe::capture_profile(const std::vector<ggml_tensor *> & ids, ggml_backend_sched_t sched) {
+    if (!profile_enabled || profile_counts.empty()) {
+        return;
+    }
+
+    struct capture {
+        int il;
+        size_t offset;
+        size_t count;
+    };
+    std::vector<capture> captures;
+    std::vector<int32_t> values;
+    uint64_t n_tokens = 0;
+
+    size_t total_count = 0;
+    for (size_t il = 0; il < ids.size(); ++il) {
+        ggml_tensor * t = ids[il];
+        if (t != nullptr && profile_counts.find((int) il) != profile_counts.end()) {
+            total_count += ggml_nelements(t);
+        }
+    }
+    values.resize(total_count);
+    captures.reserve(profile_counts.size());
+
+    size_t offset = 0;
+    for (size_t il = 0; il < ids.size(); ++il) {
+        ggml_tensor * t = ids[il];
+        if (t == nullptr || profile_counts.find((int) il) == profile_counts.end()) {
+            continue;
+        }
+        const size_t count = ggml_nelements(t);
+        captures.push_back({ (int) il, offset, count });
+        n_tokens = std::max<uint64_t>(n_tokens, t->ne[1]);
+        ggml_backend_t backend = ggml_backend_sched_get_tensor_backend(sched, t);
+        GGML_ASSERT(backend != nullptr);
+        ggml_backend_tensor_get_async(backend, t, values.data() + offset, 0, count * sizeof(int32_t));
+        offset += count;
+    }
+    if (captures.empty()) {
+        return;
+    }
+
+    ggml_backend_sched_synchronize(sched);
+    for (const auto & c : captures) {
+        auto & counts = profile_counts.at(c.il);
+        for (size_t i = 0; i < c.count; ++i) {
+            const int32_t expert = values[c.offset + i];
+            if (expert >= 0 && expert < (int32_t) counts.size()) {
+                ++counts[expert];
+            }
+        }
+    }
+    profile_tokens += n_tokens;
+
+    std::ofstream out(profile_path, std::ios::trunc);
+    if (!out) {
+        LLAMA_LOG_WARN("%s: could not write HotMoE profile '%s'\n", __func__, profile_path.c_str());
+        return;
+    }
+    out << "# Atomic HotMoE route profile; tokens " << profile_tokens << "\n";
+    out << "n_expert " << n_expert << "\n";
+    for (const auto & [il, counts] : profile_counts) {
+        std::vector<int32_t> order(counts.size());
+        std::iota(order.begin(), order.end(), 0);
+        std::stable_sort(order.begin(), order.end(), [&](int32_t a, int32_t b) {
+            return counts[a] > counts[b];
+        });
+        out << "L " << il;
+        for (int32_t expert : order) {
+            out << ' ' << expert;
+        }
+        out << '\n';
     }
 }
 
