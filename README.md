@@ -1,8 +1,8 @@
 # Qwen3.8 Flash-Next AtomicChat · 128K Vulkan Runtime
 
-A local Windows runtime for the existing **AtomicChat Q4_K_M** model on a **Radeon RX 7900 XTX with 64 GB RAM**. Download the normal model separately and point the launcher at its first shard. This package contains the runtime, not model weights.
+A local Windows runtime for the existing **AtomicChat Q4_K_M** model on a **Radeon RX 7900 XTX with 64 GB RAM**. Download the normal model separately and point the launcher at its first shard. The launcher downloads the matching MTP helper automatically.
 
-With the optional MTP helper enabled, the September profile measured roughly **196–216 prompt tokens/s from 32K to 124K loaded context**, with **20–24 decode tokens/s** on the included synthetic workload.
+With MTP enabled by default, the September profile measured roughly **196–216 prompt tokens/s from 32K to 124K loaded context**, with **20–24 decode tokens/s** on the included synthetic workload.
 
 | Loaded context | Prompt tok/s | Decode tok/s |
 |---|---:|---:|
@@ -31,7 +31,9 @@ Requirements: Windows 11, PowerShell 7, AMD Vulkan drivers, an RX 7900 XTX 24 GB
 
 Connect your existing OpenAI-compatible client to **http://127.0.0.1:8080/v1**. Add `-CheckOnly` to validate files and the selected GPU without loading the model. The launcher verifies runtime hashes, target shard sizes, and native GPU placement.
 
-For the MTP configuration measured above, additionally pass `-DraftModel "X:\models\mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf"`. This optional helper is checked against SHA-256 `41ef1d94ee9249d4140de494d1ad6de4441860e1b50e31cf4cceb0971f8ddf12` (2,362,007,744 bytes). Without it, the target model runs normally with MTP off; its decode speed is not the MTP result in the table.
+**The matching MTP helper is included in [Releases](https://github.com/123123asdrty-creator/Qwen3.8-Flash-Next-AtomicChat-128K-Vulkan/releases/tag/mtp-2026.09.04).** On first launch, `scripts/Get-Mtp.ps1` downloads its two parts, joins them into `models/mtp/mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf`, and verifies the complete SHA-256: `41ef1d94ee9249d4140de494d1ad6de4441860e1b50e31cf4cceb0971f8ddf12` (2,362,007,744 bytes). This is the exact converted helper used for the measurements above.
+
+To prepare it ahead of time, run `.\scripts\Get-Mtp.ps1`. Downloads resume after interruption. Allow about 4.8 GB of free space during assembly; the downloaded parts are removed after verification. For an existing copy, pass `-DraftModel "X:\models\mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf"`. `-DisableMtp` is available for explicit control runs, whose decode speeds differ from the MTP results.
 
 The server keeps two recurrent-state checkpoints so successive requests can reuse their unchanged prefix. Clients should send the complete message sequence with each request. A new conversation or changed prefix still requires prompt processing.
 
@@ -53,6 +55,6 @@ Four independent GPU attention checks passed against a double-precision CPU orac
 
 ## Package contents
 
-The repository includes the server and perplexity binaries, DLL dependencies and hashes, model validation, the source patch and additions, and synthetic benchmark/memory evidence. Model weights are downloaded separately.
+The repository includes the server and perplexity binaries, DLL dependencies and hashes, model validation, the source patch and additions, and synthetic benchmark/memory evidence. Releases provide the matching MTP helper. The regular AtomicChat target model is downloaded separately.
 
 See [tuning controls](TUNING.md), [build instructions](SOURCE.md), and the machine-readable [release profile](config/release-profile.json). Use `-DisableMtp`, `-DisableHostMoe`, or `-DisableSparsePrefill` for explicit control runs; their speeds are not the numbers above.

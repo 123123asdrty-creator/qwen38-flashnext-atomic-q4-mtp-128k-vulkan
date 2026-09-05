@@ -1,0 +1,19 @@
+{
+  "file": "mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf",
+  "bytes": 2362007744,
+  "sha256": "41ef1d94ee9249d4140de494d1ad6de4441860e1b50e31cf4cceb0971f8ddf12",
+  "parts": [
+    {
+      "file": "mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf.part1",
+      "bytes": 1073741824,
+      "sha256": "04e6d4b039accb9394576e02dc3bbb26a64e43b1d2a5ad810b8667326a044af6",
+      "url": "https://github.com/123123asdrty-creator/Qwen3.8-Flash-Next-AtomicChat-128K-Vulkan/releases/download/mtp-2026.09.04/mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf.part1"
+    },
+    {
+      "file": "mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf.part2",
+      "bytes": 1288265920,
+      "sha256": "fcf955cc1c6f1d86cdbf9789acd0968c29a0f1b04f25f49fb50a7230f5553428",
+      "url": "https://github.com/123123asdrty-creator/Qwen3.8-Flash-Next-AtomicChat-128K-Vulkan/releases/download/mtp-2026.09.04/mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf.part2"
+    }
+  ]
+}

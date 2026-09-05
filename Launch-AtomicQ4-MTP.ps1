@@ -74,8 +74,10 @@ if ([string]::IsNullOrWhiteSpace($Server)) {
 $resolvedServer = (Resolve-Path -LiteralPath $Server).Path
 $resolvedModel = (Resolve-Path -LiteralPath $Model).Path
 $resolvedDraft = $null
-if ([string]::IsNullOrWhiteSpace($DraftModel)) { $DisableMtp = $true }
 if (-not $DisableMtp) {
+    if ([string]::IsNullOrWhiteSpace($DraftModel)) {
+        $DraftModel = & (Join-Path $packageRoot 'scripts\Get-Mtp.ps1')
+    }
     $resolvedDraft = (Resolve-Path -LiteralPath $DraftModel).Path
 }
 

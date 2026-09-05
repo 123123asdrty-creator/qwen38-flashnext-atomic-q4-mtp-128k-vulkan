@@ -16,7 +16,7 @@
 | GpuDeviceIndex | 1 | Native preflight must identify RX 7900 XTX as Vulkan0 |
 | Port | 8080 | Localhost-only inference API |
 
-MTP is enabled when a matching `-DraftModel` is supplied; the model alone runs with MTP off. `-DisableMtp`, `-DisableHostMoe`, `-DisableSparsePrefill`, `-DisablePromptCache`, and `-DisableQsaKeyOnly` provide explicit off paths. Larger microbatches can grow GPU scratch enough to trigger a severe prompt-speed drop at depth. Recheck memory and throughput when changing context, placement, cache types, or the desktop workload.
+MTP is enabled by default. The launcher downloads and verifies the matching helper when `-DraftModel` is omitted. `-DisableMtp`, `-DisableHostMoe`, `-DisableSparsePrefill`, `-DisablePromptCache`, and `-DisableQsaKeyOnly` provide explicit off paths. Larger microbatches can grow GPU scratch enough to trigger a severe prompt-speed drop at depth. Recheck memory and throughput when changing context, placement, cache types, or the desktop workload.
 
 The launch clears inherited LLAMA_/GGML_ overrides, then sets the declared profile. CPU-mapped PLE remains mmap-backed. Four expert banks are staged in committed system RAM and shared by CPU decode and Vulkan prompt reads. Duplicate original mappings remain valid fallback storage. Native phase profiling and allocation auditing are off for normal use.
 

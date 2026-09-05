@@ -22,7 +22,9 @@
   "mtp_sidecar": {
     "file": "mtp-Qwen3.8-Flash-Next-Q4_0-qwen4exp-fast.gguf",
     "bytes": 2362007744,
-    "sha256": "41ef1d94ee9249d4140de494d1ad6de4441860e1b50e31cf4cceb0971f8ddf12"
+    "sha256": "41ef1d94ee9249d4140de494d1ad6de4441860e1b50e31cf4cceb0971f8ddf12",
+    "release_url": "https://github.com/123123asdrty-creator/Qwen3.8-Flash-Next-AtomicChat-128K-Vulkan/releases/tag/mtp-2026.09.04",
+    "download_manifest": "config/mtp-download.json"
   },
   "defaults": {
     "context": 131072,
@@ -56,7 +58,8 @@
     "mtp_shared_output": true,
     "mtp_kv_only_reserve": true,
     "memory_priority": 5,
-    "phase_profiling": false
+    "phase_profiling": false,
+    "mtp_enabled": true
   },
   "validation": {
     "date": "2026-09-04",
