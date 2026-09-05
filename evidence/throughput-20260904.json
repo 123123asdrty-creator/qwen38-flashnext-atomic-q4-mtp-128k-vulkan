@@ -1,0 +1,166 @@
+{
+  "date": "2026-09-04",
+  "complete": true,
+  "contextCapacity": 131072,
+  "lastMeasuredPromptDepth": 126976,
+  "workload": "Synthetic append-only code corpus; approximately 4096 fresh prompt tokens and 128 greedy generated tokens per measured row",
+  "configuration": "config/release-profile.json",
+  "phaseProfiling": true,
+  "rows": [
+    {
+      "phase": "fill",
+      "depth": 4096,
+      "freshTokens": 4096,
+      "cachedTokens": 0,
+      "promptMs": 74803.242,
+      "promptTokensPerSecond": 54.75698499805664,
+      "generatedTokens": 1,
+      "decodeTokensPerSecond": null,
+      "promptHash": "7e0b2260384834cf4485f54d39523f9f9b6400b6b4627bc3dc7233b0ccbb54ae",
+      "exactReferenceTokens": true
+    },
+    {
+      "phase": "measure",
+      "depth": 8192,
+      "freshTokens": 4096,
+      "cachedTokens": 4096,
+      "promptMs": 23639.419,
+      "promptTokensPerSecond": 173.2699098907634,
+      "generatedTokens": 128,
+      "decodeTokensPerSecond": 13.728425158301173,
+      "promptHash": "ebe0334866fb8675691d18387f6a9f7413bda34d1aff71f240e85523baec051a",
+      "exactReferenceTokens": false
+    },
+    {
+      "phase": "fill",
+      "depth": 28672,
+      "freshTokens": 20484,
+      "cachedTokens": 8188,
+      "promptMs": 94183.459,
+      "promptTokensPerSecond": 217.49041941642852,
+      "generatedTokens": 1,
+      "decodeTokensPerSecond": null,
+      "promptHash": "93c1608e277c01367ecae7ab533374615ef52e82629e07ee75f0ca98431f5579",
+      "exactReferenceTokens": true
+    },
+    {
+      "phase": "measure",
+      "depth": 32768,
+      "freshTokens": 4096,
+      "cachedTokens": 28672,
+      "promptMs": 18981.394,
+      "promptTokensPerSecond": 215.79026282263567,
+      "generatedTokens": 128,
+      "decodeTokensPerSecond": 23.73830444581059,
+      "promptHash": "ac0a17edf892714ab164db0d3329dfcfd916b240d8428179c35de8b9d9573eae",
+      "exactReferenceTokens": true
+    },
+    {
+      "phase": "fill",
+      "depth": 45056,
+      "freshTokens": 12161,
+      "cachedTokens": 32895,
+      "promptMs": 56346.72,
+      "promptTokensPerSecond": 215.82445260345233,
+      "generatedTokens": 1,
+      "decodeTokensPerSecond": null,
+      "promptHash": "815eb524c7bda43bc461caf94eb4a3b8c98ff48cfe052538b36048eb101dcfb0",
+      "exactReferenceTokens": true
+    },
+    {
+      "phase": "measure",
+      "depth": 49152,
+      "freshTokens": 4096,
+      "cachedTokens": 45056,
+      "promptMs": 19074.513,
+      "promptTokensPerSecond": 214.73680612448666,
+      "generatedTokens": 128,
+      "decodeTokensPerSecond": 22.233593839858948,
+      "promptHash": "255863cdd9c05f2c400abd7293578df7579e8e768eaa3dc4b5faffcb7f5a38dc",
+      "exactReferenceTokens": true
+    },
+    {
+      "phase": "fill",
+      "depth": 61440,
+      "freshTokens": 12161,
+      "cachedTokens": 49279,
+      "promptMs": 57200.409,
+      "promptTokensPerSecond": 212.6033749164276,
+      "generatedTokens": 1,
+      "decodeTokensPerSecond": null,
+      "promptHash": "e2520f00df2132ac4ca8ca7dde74bfec773921a34542031e810ba22edccd825a",
+      "exactReferenceTokens": true
+    },
+    {
+      "phase": "measure",
+      "depth": 65536,
+      "freshTokens": 4096,
+      "cachedTokens": 61440,
+      "promptMs": 19429.733,
+      "promptTokensPerSecond": 210.81092570855193,
+      "generatedTokens": 128,
+      "decodeTokensPerSecond": 21.447525588840126,
+      "promptHash": "fd123c5e09d4390029ecb01644032d7d85a50e817d22b098d11e0f0c8482df51",
+      "exactReferenceTokens": true
+    },
+    {
+      "phase": "fill",
+      "depth": 94208,
+      "freshTokens": 28545,
+      "cachedTokens": 65663,
+      "promptMs": 136539.036,
+      "promptTokensPerSecond": 209.06109224324683,
+      "generatedTokens": 1,
+      "decodeTokensPerSecond": null,
+      "promptHash": "02199f2f3b96cea25bf1023abe3c20703701411e175f024abeae1dd7192a2609",
+      "exactReferenceTokens": null
+    },
+    {
+      "phase": "measure",
+      "depth": 98304,
+      "freshTokens": 4096,
+      "cachedTokens": 94208,
+      "promptMs": 20391.076,
+      "promptTokensPerSecond": 200.87218545995316,
+      "generatedTokens": 128,
+      "decodeTokensPerSecond": 20.323251720275245,
+      "promptHash": "34354662ddda85a55c0d1a55e62832999ee839bc9dcb3c407252877f1c89f523",
+      "exactReferenceTokens": null
+    },
+    {
+      "phase": "fill",
+      "depth": 122880,
+      "freshTokens": 24449,
+      "cachedTokens": 98431,
+      "promptMs": 121643.393,
+      "promptTokensPerSecond": 200.9891322252085,
+      "generatedTokens": 1,
+      "decodeTokensPerSecond": null,
+      "promptHash": "d0aa7c95931d610821b1cc4e452b69bfd25ad3aab4392c5e6e94c44bc52e0fb9",
+      "exactReferenceTokens": null
+    },
+    {
+      "phase": "measure",
+      "depth": 126976,
+      "freshTokens": 4096,
+      "cachedTokens": 122880,
+      "promptMs": 20845.982,
+      "promptTokensPerSecond": 196.48870463382343,
+      "generatedTokens": 128,
+      "decodeTokensPerSecond": 20.393468694580346,
+      "promptHash": "d3262d8feba9ace9ae05fbade23bda1c10a7aeb32305cf396544bb20ffaf23d8",
+      "exactReferenceTokens": null
+    }
+  ],
+  "reference": "Memory-only BF16 revision, compared to original at 8K/32K/48K/64K; no reference above 64K",
+  "numericalOracle": {
+    "cases": 4,
+    "maxScaledError": 1.45e-7,
+    "nmseRange": [
+      2.6e-14,
+      4.8e-14
+    ],
+    "selectedBf16Bits": "preserved",
+    "fullModelKld": "not evaluated for this revision"
+  }
+}

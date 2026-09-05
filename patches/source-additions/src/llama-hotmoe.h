@@ -45,6 +45,9 @@
 //   LLAMA_HOTMOE_MAX_TOK  max tokens per ubatch that use the cache (default 1)
 //   LLAMA_HOSTMOE         expose host-resident experts directly to the GPU
 //                         through Vulkan external host memory (experimental)
+//   LLAMA_HOSTMOE_MIN_TOK min tokens per ubatch that use HostMoE (default 1)
+//   LLAMA_HOSTMOE_MAX_TOK max tokens per ubatch that use HostMoE (default 1)
+//   LLAMA_HOSTMOE_STAGE   copy imported tensors into committed RAM first (default 1)
 
 #include "ggml.h"
 #include "ggml-backend.h"
@@ -69,6 +72,11 @@ struct llama_hotmoe_layer {
     ggml_tensor * host_up   = nullptr;
     ggml_tensor * host_down = nullptr;
 
+    // Non-owning CPU views of the same staged storage used by the Vulkan views.
+    ggml_tensor * cpu_gate = nullptr;
+    ggml_tensor * cpu_up   = nullptr;
+    ggml_tensor * cpu_down = nullptr;
+
     // [1, n_expert] expert-to-cache lookup tables
     ggml_tensor * lut_hot  = nullptr;
     ggml_tensor * lut_cold = nullptr;
@@ -84,7 +92,9 @@ struct llama_hotmoe {
     bool profile_enabled = false;
     int  n_slots    = 0;
     int  n_expert   = 0;
+    int  min_tokens = 1;
     int  max_tokens = 1;
+    int  host_phase = -1; // -1 unknown, 0 normal/decode graph, 1 HostMoE prompt graph
     int  profile_max_tokens = 1;
 
     size_t vram_bytes = 0;
@@ -100,6 +110,7 @@ struct llama_hotmoe {
     // owned resources
     std::vector<ggml_context *>        ctxs;
     std::vector<ggml_backend_buffer_t> bufs;
+    std::vector<void *>                host_allocs;
 
     ~llama_hotmoe();
     void reset();

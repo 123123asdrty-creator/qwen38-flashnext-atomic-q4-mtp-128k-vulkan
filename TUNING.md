@@ -1,25 +1,23 @@
-# Tuning
+# Runtime controls
 
-The launcher exposes `-Model`, `-DraftModel`, `-Server`, `-Context`,
-`-Batch`, `-UBatch`, `-DraftNMax`, `-DraftPMin`, and `-Port` directly.
-
-| Parameter | Default | Guidance |
+| Parameter | Default | Effect |
 |---|---:|---|
-| `Context` | 131072 | Keep for the production profile. |
-| `Batch` / `UBatch` | 4096 / 3072 | This is the measured 30K-depth setting. Reduce UBatch to 2048 or 1024 if another GPU workload causes allocation trouble. |
-| `Threads` | 22 | Tuned for the Ryzen 9 7900X. |
-| `CpuMoeLayers` | 38 | Lower needs more VRAM; higher is generally slower. |
-| `DraftNMax` | 3 | Try 2 only in a controlled long-context A/B. |
-| `DraftPMin` | 0.7 | Higher is more conservative; lower verifies more drafts. |
-| `CacheK` / `CacheV` | bf16 / bf16 | Quality reference. Q8 target KV is rejected. |
-| `DisableMtp` | off | Explicit non-MTP control; DraftModel is then optional. |
-| `DisablePromptCache` | off | Clean independent-request benchmark mode. |
-| `DisableQsaKeyOnly` | off | Diagnostic full-indexer mode; costs about 768 MiB at 128K. |
-| `GpuDeviceIndex` | 1 | Tested XTX index on the dual-GPU system. |
+| Context | 131072 | Allocated context capacity; 124K loaded is the deepest measured prompt |
+| Batch | 4096 | Logical prompt batch |
+| UBatch | 1536 | Bounds the growing sparse attention workspace |
+| DraftUBatch | 256 | Separate MTP catch-up workspace; capped to target UBatch |
+| CpuMoeLayers | 40 | Eight expert layers remain in dedicated VRAM |
+| Threads | 22 | Leaves two logical CPUs for the desktop on the measured machine |
+| DraftNMax | 3 | Maximum speculative draft length |
+| DraftPMin | 0.7 | Minimum MTP draft probability |
+| ContextCheckpoints | 2 | Retains recent recurrent prefix boundaries in RAM |
+| CacheK / CacheV | bf16 | Target cache precision; other values are outside this measured profile |
+| DraftCache | q8_0 | MTP helper cache precision |
+| GpuDeviceIndex | 1 | Native preflight must identify RX 7900 XTX as Vulkan0 |
+| Port | 8080 | Localhost-only inference API |
 
-Fixed quality controls: BF16 QSA routing key, dense bypass off, gather off,
-strided-add off, on-device speculative checkpoints off, HotMoE/HostMoE off,
-`-ctxcp 0`, `--fit off`, mmap on, and context shifting off.
+MTP is enabled when a matching `-DraftModel` is supplied; the model alone runs with MTP off. `-DisableMtp`, `-DisableHostMoe`, `-DisableSparsePrefill`, `-DisablePromptCache`, and `-DisableQsaKeyOnly` provide explicit off paths. Larger microbatches can grow GPU scratch enough to trigger a severe prompt-speed drop at depth. Recheck memory and throughput when changing context, placement, cache types, or the desktop workload.
 
-Change one variable per run. Restart between MTP and non-MTP profiles, run the
-same prompt twice, and treat the first row as page-cache warm-up.
+The launch clears inherited LLAMA_/GGML_ overrides, then sets the declared profile. CPU-mapped PLE remains mmap-backed. Four expert banks are staged in committed system RAM and shared by CPU decode and Vulkan prompt reads. Duplicate original mappings remain valid fallback storage. Native phase profiling and allocation auditing are off for normal use.
+
+Prefix reuse requires an unchanged earlier token sequence. Two recurrent checkpoints retain usable boundaries; setting the count to zero can cause full reprocessing between turns. Arbitrary middle edits and context relocation cannot reuse the recurrent prefix. No automatic context shifting is enabled.

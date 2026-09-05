@@ -1,11 +1,11 @@
 {
-  "schema_version": 1,
-  "name": "Qwen3.8 Flash-Next Atomic Q4 MTP 128K Vulkan",
+  "schema_version": 2,
+  "name": "Qwen3.8 Flash-Next AtomicChat 128K Vulkan Runtime",
   "runtime": {
     "build": 10682,
     "base_commit": "843d5750579a15ed4a42d73eb862855c271021ac",
     "target_gpu": "AMD Radeon RX 7900 XTX",
-    "expected_vulkan_model_buffer_mib": 15595.52
+    "expected_vulkan_model_buffer_mib": 13670.52
   },
   "hardware": {
     "gpu": "AMD Radeon RX 7900 XTX 24 GB",
@@ -27,9 +27,9 @@
   "defaults": {
     "context": 131072,
     "batch": 4096,
-    "ubatch": 3072,
+    "ubatch": 1536,
     "threads": 22,
-    "cpu_moe_layers": 38,
+    "cpu_moe_layers": 40,
     "target_cache_k": "bf16",
     "target_cache_v": "bf16",
     "qsa_indexer_k": "bf16",
@@ -37,11 +37,35 @@
     "mtp_depth": 3,
     "mtp_p_min": 0.7,
     "draft_cache": "q8_0",
-    "context_checkpoints": 0,
+    "context_checkpoints": 2,
     "hotmoe": false,
-    "hostmoe": false,
+    "hostmoe": true,
     "dense_bypass": false,
     "gather": false,
-    "strided_add": false
+    "strided_add": false,
+    "draft_ubatch": 256,
+    "prompt_cache": true,
+    "prompt_cache_ram_mib": 0,
+    "hostmoe_layers": 4,
+    "hostmoe_stage": true,
+    "hostmoe_shared_cpu": true,
+    "hostmoe_min_tokens": 512,
+    "hostmoe_max_tokens": 4096,
+    "sparse_prefill_gather_tile": 64,
+    "topk_histogram_banks": 8,
+    "mtp_shared_output": true,
+    "mtp_kv_only_reserve": true,
+    "memory_priority": 5,
+    "phase_profiling": false
+  },
+  "validation": {
+    "date": "2026-09-04",
+    "context_capacity": 131072,
+    "workload": "Synthetic append-only code corpus; approximately 4096 fresh tokens and 128 greedy generated tokens per measurement",
+    "bf16_attention_oracle": "Four GPU cases against an independent double-precision CPU oracle; selected BF16 K/V bits preserved",
+    "limitations": [
+      "Floating-point reduction order changes; generated tokens are not universally identical to the dense path",
+      "End-to-end KLD and general intelligence have not been re-evaluated for this profile"
+    ]
   }
 }

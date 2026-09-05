@@ -23,7 +23,7 @@ foreach ($entry in $environment) {
         [Environment]::SetEnvironmentVariable($entry.Substring(0, $separator), $entry.Substring($separator + 1), 'Process')
     }
 }
-& cmake -S $source -B $build -G 'NMake Makefiles' -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DGGML_NATIVE=ON -DLLAMA_CURL=OFF
+& cmake -S $source -B $build -G 'NMake Makefiles' -DCMAKE_BUILD_TYPE=Release -DGGML_VULKAN=ON -DGGML_NATIVE=ON -DLLAMA_CURL=OFF -DLLAMA_BUILD_TESTS=ON -DLLAMA_BUILD_UI=OFF
 if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
 foreach ($item in $Target.Split(';', [StringSplitOptions]::RemoveEmptyEntries)) {
     & cmake --build $build --config Release --target $item --parallel $Jobs

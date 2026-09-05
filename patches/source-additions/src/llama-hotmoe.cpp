@@ -66,12 +66,23 @@ void llama_hotmoe::reset() {
             ggml_backend_buffer_free(b);
         }
     }
+    for (void * p : host_allocs) {
+        if (!p) {
+            continue;
+        }
+#ifdef _WIN32
+        VirtualFree(p, 0, MEM_RELEASE);
+#else
+        std::free(p);
+#endif
+    }
     for (auto * c : ctxs) {
         if (c) {
             ggml_free(c);
         }
     }
     bufs.clear();
+    host_allocs.clear();
     ctxs.clear();
     layers.clear();
     enabled = false;
@@ -79,6 +90,9 @@ void llama_hotmoe::reset() {
     init_attempted = false;
     n_slots = 0;
     n_expert = 0;
+    min_tokens = 1;
+    max_tokens = 1;
+    host_phase = -1;
     vram_bytes = 0;
     seed_coverage = 0.0;
     ++generation;
@@ -169,6 +183,14 @@ void llama_hotmoe_init(llama_model & model, bool force) {
     hm.init_attempted = force;
     hm.max_tokens = std::max(1, hotmoe_env_int(
             host_direct_req ? "LLAMA_HOSTMOE_MAX_TOK" : "LLAMA_HOTMOE_MAX_TOK", 1));
+    hm.min_tokens = host_direct_req
+        ? std::max(1, hotmoe_env_int("LLAMA_HOSTMOE_MIN_TOK", 1))
+        : 1;
+    if (hm.min_tokens > hm.max_tokens) {
+        LLAMA_LOG_ERROR("%s: LLAMA_HOSTMOE_MIN_TOK (%d) exceeds LLAMA_HOSTMOE_MAX_TOK (%d)\n",
+                __func__, hm.min_tokens, hm.max_tokens);
+        return;
+    }
     const int swaps_per_token = std::max(0, hotmoe_env_int("LLAMA_HOTMOE_DYNAMIC", 0));
     auto dynamic = std::make_unique<hotmoe_dynamic_state>();
     dynamic->swaps_per_token = swaps_per_token;
@@ -315,7 +337,7 @@ void llama_hotmoe_init(llama_model & model, bool force) {
             return;
         }
 
-        const size_t n_tensors = cands.size() * 3 + 8;
+        const size_t n_tensors = cands.size() * 6 + 8;
         ggml_init_params ip = {
             /*.mem_size   =*/ ggml_tensor_overhead() * n_tensors,
             /*.mem_buffer =*/ nullptr,
@@ -328,18 +350,46 @@ void llama_hotmoe_init(llama_model & model, bool force) {
         }
         hm.ctxs.push_back(ctx);
 
+        const bool stage_host = hotmoe_env_int("LLAMA_HOSTMOE_STAGE", 1) > 0;
+        const bool share_cpu = stage_host && hotmoe_env_int("LLAMA_HOSTMOE_SHARED_CPU", 0) != 0;
         size_t imported_bytes = 0;
+        size_t staged_bytes = 0;
 
 
-        auto import_tensor = [&](ggml_tensor * src, const char * kind, int il) -> ggml_tensor * {
-            const uintptr_t data_begin = reinterpret_cast<uintptr_t>(src->data);
-            const uintptr_t data_end = data_begin + ggml_nbytes(src);
+        auto import_tensor = [&](ggml_tensor * src, const char * kind, int il, ggml_tensor ** cpu_view) -> ggml_tensor * {
+            const size_t tensor_size = ggml_nbytes(src);
+            const size_t alloc_size = (tensor_size + import_alignment - 1) & ~(import_alignment - 1);
+            void * owned = nullptr;
+
+            if (stage_host) {
+#ifdef _WIN32
+                owned = VirtualAlloc(nullptr, alloc_size, MEM_RESERVE | MEM_COMMIT, PAGE_READWRITE);
+#else
+                if (posix_memalign(&owned, import_alignment, alloc_size) != 0) {
+                    owned = nullptr;
+                }
+#endif
+                if (!owned) {
+                    LLAMA_LOG_ERROR("%s: could not allocate %zu MiB of staged RAM for %s layer %d\n",
+                            __func__, alloc_size / 1024 / 1024, kind, il);
+                    return nullptr;
+                }
+                // The copy faults every page in on the CPU before Vulkan imports it. This avoids
+                // late GPU accesses to untouched file-mapped pages, which can leave the Windows
+                // AMD driver waiting indefinitely inside a deep prompt batch.
+                std::memcpy(owned, src->data, tensor_size);
+            }
+
+            const uintptr_t data_begin = reinterpret_cast<uintptr_t>(owned ? owned : src->data);
+            const uintptr_t data_end = data_begin + tensor_size;
             uintptr_t map_begin = data_begin & ~(uintptr_t) (import_alignment - 1);
-            uintptr_t map_end = (data_end + import_alignment - 1) & ~(uintptr_t) (import_alignment - 1);
+            uintptr_t map_end = owned
+                ? data_begin + alloc_size
+                : (data_end + import_alignment - 1) & ~(uintptr_t) (import_alignment - 1);
 
 #ifdef _WIN32
             MEMORY_BASIC_INFORMATION mbi = {};
-            if (VirtualQuery(src->data, &mbi, sizeof(mbi)) == 0) {
+            if (!owned && VirtualQuery(src->data, &mbi, sizeof(mbi)) == 0) {
                 LLAMA_LOG_ERROR("%s: VirtualQuery failed for %s layer %d\n", __func__, kind, il);
                 return nullptr;
             }
@@ -348,14 +398,16 @@ void llama_hotmoe_init(llama_model & model, bool force) {
             // regions, so a region-based check would reject every tensor after the first — which
             // is exactly what happened once the per-tensor copy-on-write fallback started firing.
             // What actually matters is that the aligned range never leaves this file mapping.
-            MEMORY_BASIC_INFORMATION edge = {};
-            const bool begin_ok = VirtualQuery(reinterpret_cast<const void *>(map_begin), &edge, sizeof(edge)) != 0
-                && edge.AllocationBase == mbi.AllocationBase && edge.State == MEM_COMMIT;
-            const bool end_ok = VirtualQuery(reinterpret_cast<const void *>(map_end - 1), &edge, sizeof(edge)) != 0
-                && edge.AllocationBase == mbi.AllocationBase && edge.State == MEM_COMMIT;
-            if (!begin_ok || !end_ok) {
-                LLAMA_LOG_ERROR("%s: aligned %s layer %d range leaves its mapped view\n", __func__, kind, il);
-                return nullptr;
+            if (!owned) {
+                MEMORY_BASIC_INFORMATION edge = {};
+                const bool begin_ok = VirtualQuery(reinterpret_cast<const void *>(map_begin), &edge, sizeof(edge)) != 0
+                    && edge.AllocationBase == mbi.AllocationBase && edge.State == MEM_COMMIT;
+                const bool end_ok = VirtualQuery(reinterpret_cast<const void *>(map_end - 1), &edge, sizeof(edge)) != 0
+                    && edge.AllocationBase == mbi.AllocationBase && edge.State == MEM_COMMIT;
+                if (!begin_ok || !end_ok) {
+                    LLAMA_LOG_ERROR("%s: aligned %s layer %d range leaves its mapped view\n", __func__, kind, il);
+                    return nullptr;
+                }
             }
 #endif
 
@@ -371,7 +423,7 @@ void llama_hotmoe_init(llama_model & model, bool force) {
             // ERROR_COMMITMENT_LIMIT, while per tensor it charges only the ranges actually
             // imported. Nothing ever writes these pages, so they stay shared with the file mapping
             // and cost no physical memory.
-            {
+            if (!owned) {
                 DWORD old_protect = 0;
                 if (!VirtualProtect(reinterpret_cast<void *>(map_begin), map_size, PAGE_WRITECOPY, &old_protect)) {
                     LLAMA_LOG_ERROR("%s: could not relax the %s tensor for layer %d to copy-on-write "
@@ -383,9 +435,16 @@ void llama_hotmoe_init(llama_model & model, bool force) {
 #endif
 
             ggml_backend_buffer_t buffer = ggml_backend_dev_buffer_from_host_ptr(
-                    dev, reinterpret_cast<void *>(map_begin), map_size, ggml_nbytes(src));
+                    dev, reinterpret_cast<void *>(map_begin), map_size, tensor_size);
 
             if (!buffer) {
+                if (owned) {
+#ifdef _WIN32
+                    VirtualFree(owned, 0, MEM_RELEASE);
+#else
+                    std::free(owned);
+#endif
+                }
                 LLAMA_LOG_ERROR("%s: Vulkan refused the RAM-backed %s tensor for layer %d "
                                 "(%zu MiB, alignment %zu)\n",
                         __func__, kind, il, map_size / 1024 / 1024, import_alignment);
@@ -393,6 +452,10 @@ void llama_hotmoe_init(llama_model & model, bool force) {
             }
             ggml_backend_buffer_set_usage(buffer, GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
             hm.bufs.push_back(buffer);
+            if (owned) {
+                hm.host_allocs.push_back(owned);
+                staged_bytes += map_size;
+            }
 
             ggml_tensor * alias = ggml_dup_tensor(ctx, src);
             for (int d = 0; d < GGML_MAX_DIMS; ++d) {
@@ -408,6 +471,32 @@ void llama_hotmoe_init(llama_model & model, bool force) {
                 return nullptr;
             }
             imported_bytes += map_size;
+            if (share_cpu && owned) {
+                ggml_backend_dev_t cpu = ggml_backend_dev_by_type(GGML_BACKEND_DEVICE_TYPE_CPU);
+                ggml_backend_buffer_t cpu_buf = cpu ? ggml_backend_dev_buffer_from_host_ptr(cpu,
+                        reinterpret_cast<void *>(map_begin), map_size, tensor_size) : nullptr;
+                if (cpu_buf) {
+                    ggml_backend_buffer_set_usage(cpu_buf, GGML_BACKEND_BUFFER_USAGE_WEIGHTS);
+                    hm.bufs.push_back(cpu_buf);
+                    ggml_tensor * view = ggml_dup_tensor(ctx, src);
+                    for (int d = 0; d < GGML_MAX_DIMS; ++d) {
+                        view->nb[d] = src->nb[d];
+                    }
+                    ggml_format_name(view, "hostmoe.cpu.%s.%d", kind, il);
+                    if (ggml_backend_tensor_alloc(cpu_buf, view, reinterpret_cast<void *>(data_begin)) == GGML_STATUS_SUCCESS) {
+                        GGML_ASSERT(view->data == reinterpret_cast<void *>(data_begin));
+                        GGML_ASSERT(ggml_backend_buffer_is_host(cpu_buf));
+                        *cpu_view = view;
+                    }
+                }
+                if (!*cpu_view) {
+                    LLAMA_LOG_WARN("%s: CPU shared view unavailable for %s layer %d; keeping mapped CPU weights\n", __func__, kind, il);
+                }
+            }
+            if (hotmoe_env_int("LLAMA_ALLOCATION_AUDIT", 0) != 0) {
+                LLAMA_LOG_INFO("hostmoe_audit: layer=%d kind=%s tensor_bytes=%zu allocated_bytes=%zu staged=%d shared_cpu=%d\n",
+                        il, kind, tensor_size, map_size, owned != nullptr, *cpu_view != nullptr);
+            }
             return alias;
         };
 
@@ -431,9 +520,9 @@ void llama_hotmoe_init(llama_model & model, bool force) {
         for (size_t i = first; i < cands.size(); ++i) {
             const auto & c = cands[i];
             llama_hotmoe_layer hl;
-            hl.host_gate = import_tensor(c.gate, "gate", c.il);
-            hl.host_up   = import_tensor(c.up,   "up",   c.il);
-            hl.host_down = import_tensor(c.down, "down", c.il);
+            hl.host_gate = import_tensor(c.gate, "gate", c.il, &hl.cpu_gate);
+            hl.host_up   = import_tensor(c.up,   "up",   c.il, &hl.cpu_up);
+            hl.host_down = import_tensor(c.down, "down", c.il, &hl.cpu_down);
             if (!hl.host_gate || !hl.host_up || !hl.host_down) {
                 if (hm.layers.empty()) {
                     LLAMA_LOG_WARN("%s: HostMoE import failed; leaving the normal CPU expert path active\n", __func__);
@@ -455,8 +544,15 @@ void llama_hotmoe_init(llama_model & model, bool force) {
         LLAMA_LOG_INFO("%s: HostMoE enabled - GPU kernels directly read %.2f GiB of expert weights "
                        "from system RAM across PCIe on %zu layers\n",
                 __func__, imported_bytes / 1024.0 / 1024.0 / 1024.0, hm.layers.size());
-        LLAMA_LOG_INFO("%s: HostMoE active for batches of at most %d tokens; larger prompts keep the CPU path\n",
-                __func__, hm.max_tokens);
+        if (stage_host) {
+            LLAMA_LOG_INFO("%s: HostMoE staged %.2f GiB in committed RAM to eliminate file-backed GPU page faults\n",
+                    __func__, staged_bytes / 1024.0 / 1024.0 / 1024.0);
+        }
+        if (share_cpu) {
+            LLAMA_LOG_INFO("%s: CPU decode shares staged HostMoE storage where all three views are available\n", __func__);
+        }
+        LLAMA_LOG_INFO("%s: HostMoE active for batches of %d..%d tokens; decode and larger prompts keep the normal path\n",
+                __func__, hm.min_tokens, hm.max_tokens);
         if (n_slots_req > 0) {
             LLAMA_LOG_INFO("%s: LLAMA_HOSTMOE takes precedence over the VRAM HotMoE cache for this run\n", __func__);
         }
@@ -619,6 +715,28 @@ void llama_hotmoe_init(llama_model & model, bool force) {
 }
 
 void llama_hotmoe_maybe_phase(llama_model & model, int n_tokens, ggml_backend_sched_t sched) {
+    llama_hotmoe & hm = model.hotmoe;
+    if (hm.host_direct) {
+        const int next_phase = n_tokens >= hm.min_tokens && n_tokens <= hm.max_tokens ? 1 : 0;
+        if (hm.host_phase != next_phase) {
+            const int previous_phase = hm.host_phase;
+            const int64_t t_start_us = ggml_time_us();
+            // Entering HostMoE after decode changes tensor backends. Discard the prior normal-graph
+            // assignments at that boundary so Vulkan cannot reuse stale split/copy state. Leaving
+            // HostMoE does not need a forced synchronization: the normal graph already establishes
+            // its own dependencies, and waiting here would turn outstanding prompt work into a
+            // multi-second artificial handoff before a small prompt tail or first decode token.
+            if (next_phase == 1) {
+                ggml_backend_sched_synchronize(sched);
+                ggml_backend_sched_reset(sched);
+            }
+            hm.host_phase = next_phase;
+            LLAMA_LOG_INFO("%s: HostMoE phase %s -> %s in %.2f ms (n_tokens = %d)\n",
+                    __func__, previous_phase < 0 ? "initial" : previous_phase ? "prompt" : "normal",
+                    next_phase ? "prompt" : "normal", (ggml_time_us() - t_start_us) / 1000.0, n_tokens);
+        }
+        return;
+    }
     if (hotmoe_env_int("LLAMA_HOTMOE_DEFER", 0) > 0) {
         if (!model.hotmoe.enabled) {
             LLAMA_LOG_INFO("%s: sizing and allocating HotMoE after fixed runtime allocations\n", __func__);
@@ -627,10 +745,6 @@ void llama_hotmoe_maybe_phase(llama_model & model, int n_tokens, ggml_backend_sc
         return;
     }
     if (hotmoe_env_int("LLAMA_HOTMOE_PHASED", 0) <= 0) {
-        return;
-    }
-    llama_hotmoe & hm = model.hotmoe;
-    if (hm.host_direct) {
         return;
     }
     const int prompt_min = std::max(2, hotmoe_env_int("LLAMA_HOTMOE_PHASE_MIN", 512));

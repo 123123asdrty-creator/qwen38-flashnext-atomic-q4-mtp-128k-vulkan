@@ -1,0 +1,3 @@
+*.patch text eol=lf -whitespace
+*.dll -text
+*.exe -text

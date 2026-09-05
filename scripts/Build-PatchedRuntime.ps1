@@ -18,8 +18,13 @@ git -C $source apply --check $patch
 if ($LASTEXITCODE -ne 0) { throw 'Source patch preflight failed.' }
 git -C $source apply $patch
 if ($LASTEXITCODE -ne 0) { throw 'Source patch failed.' }
-Copy-Item -LiteralPath (Join-Path $packageRoot 'patches\source-additions\src\llama-hotmoe.cpp') -Destination (Join-Path $source 'src\llama-hotmoe.cpp')
-Copy-Item -LiteralPath (Join-Path $packageRoot 'patches\source-additions\src\llama-hotmoe.h') -Destination (Join-Path $source 'src\llama-hotmoe.h')
+$additions = Join-Path $packageRoot 'patches\source-additions'
+foreach ($file in Get-ChildItem -LiteralPath $additions -File -Recurse) {
+    $relative = [IO.Path]::GetRelativePath($additions, $file.FullName)
+    $destination = Join-Path $source $relative
+    New-Item -ItemType Directory -Path (Split-Path -Parent $destination) -Force | Out-Null
+    Copy-Item -LiteralPath $file.FullName -Destination $destination
+}
 $builder = Join-Path $packageRoot 'scripts\Build-Windows-Vulkan.ps1'
 & $builder -SourceDirectory $source -BuildDirectory $BuildDirectory -Target 'llama-server;llama-perplexity' -Jobs $Jobs
 exit $LASTEXITCODE
